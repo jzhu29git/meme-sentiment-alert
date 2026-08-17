@@ -42,7 +42,8 @@ class MemeAlertSystem:
     def run_scan(self) -> int:
         """执行单轮全网扫描与异动判定"""
         console.print(Panel.fit("🔍 [bold cyan]正在执行链上 Meme 与 NFT 舆情异动扫描...[/bold cyan]"))
-        alert_count = 0
+        token_alerts = []
+        nft_alerts = []
 
         # 1. 扫描链上 Meme 代币
         try:
@@ -52,8 +53,7 @@ class MemeAlertSystem:
                 if alert:
                     token_key = f"TOKEN:{alert['chain']}:{alert['tokenAddress']}"
                     if self.dedup.is_fresh_alert(token_key):
-                        alert_count += 1
-                        self._handle_token_alert(alert, token_key)
+                        token_alerts.append((alert, token_key))
                     else:
                         logger.debug("代币 [%s] 处于冷却期中，跳过推送", token_key)
         except Exception as e:
@@ -67,22 +67,44 @@ class MemeAlertSystem:
                 if alert:
                     nft_key = f"NFT:{alert['chain']}:{alert['slug']}"
                     if self.dedup.is_fresh_alert(nft_key):
-                        alert_count += 1
-                        self._handle_nft_alert(alert, nft_key)
+                        nft_alerts.append((alert, nft_key))
                     else:
                         logger.debug("NFT [%s] 处于冷却期中，跳过推送", nft_key)
         except Exception as e:
             logger.error("扫描 NFT 异动时出错: %s", e)
 
-        # 3. 清理过期去重状态
+        total_alerts = len(token_alerts) + len(nft_alerts)
+
+        # 控制台打印明细
+        for alert, _ in token_alerts:
+            self._print_token_table(alert)
+        for alert, _ in nft_alerts:
+            self._print_nft_table(alert)
+
+        # 3. 投递飞书简报 Digest
+        if total_alerts > 0:
+            digest_card = self.notifier.build_digest_card(
+                [a[0] for a in token_alerts],
+                [a[0] for a in nft_alerts]
+            )
+            if not self.dry_run:
+                success = self.notifier.send_card(digest_card)
+                if success:
+                    for _, key in token_alerts + nft_alerts:
+                        self.dedup.mark_alerted(key)
+            else:
+                console.print("[yellow][DRY-RUN 模式] 仅在控制台预览 Digest，不发送真实飞书消息[/yellow]")
+                for _, key in token_alerts + nft_alerts:
+                    self.dedup.mark_alerted(key)
+
+        # 4. 清理过期去重状态
         self.dedup.cleanup_expired()
 
-        console.print(f"[bold green]✓ 本轮扫描完成，共触发 {alert_count} 个新异动预警。[/bold green]")
-        return alert_count
+        console.print(f"[bold green]✓ 本轮扫描完成，共捕获 {total_alerts} 个新异动预警。[/bold green]")
+        return total_alerts
 
-    def _handle_token_alert(self, alert: dict, key: str) -> None:
-        """处理代币告警"""
-        table = Table(title=f"🔥 命中 Meme 异动预警: ${alert['symbol']} ({alert['chain']})", show_header=True)
+    def _print_token_table(self, alert: dict) -> None:
+        table = Table(title=f"🔥 Meme 异动: ${alert['symbol']} ({alert['chain']})", show_header=True)
         table.add_column("指标", style="cyan")
         table.add_column("数值", style="magenta")
         table.add_row("代币名称", alert['name'])
@@ -95,18 +117,8 @@ class MemeAlertSystem:
         table.add_row("综合热度评分", f"{alert['score']} 分")
         console.print(table)
 
-        card = self.notifier.build_token_card(alert)
-        if not self.dry_run:
-            success = self.notifier.send_card(card)
-            if success:
-                self.dedup.mark_alerted(key)
-        else:
-            console.print("[yellow][DRY-RUN 模式] 仅在控制台预览，不发送飞书消息[/yellow]")
-            self.dedup.mark_alerted(key)
-
-    def _handle_nft_alert(self, alert: dict, key: str) -> None:
-        """处理 NFT 告警"""
-        table = Table(title=f"🎯 命中 NFT 异动: {alert['name']} ({alert['chain']})", show_header=True)
+    def _print_nft_table(self, alert: dict) -> None:
+        table = Table(title=f"🎯 NFT 异动: {alert['name']} ({alert['chain']})", show_header=True)
         table.add_column("属性", style="cyan")
         table.add_column("数据", style="magenta")
         table.add_row("集合名称", alert['name'])
@@ -115,15 +127,6 @@ class MemeAlertSystem:
         table.add_row("持有人数", str(alert['owners']))
         table.add_row("Element 链接", alert['elementUrl'])
         console.print(table)
-
-        card = self.notifier.build_nft_card(alert)
-        if not self.dry_run:
-            success = self.notifier.send_card(card)
-            if success:
-                self.dedup.mark_alerted(key)
-        else:
-            console.print("[yellow][DRY-RUN 模式] 仅在控制台预览，不发送飞书消息[/yellow]")
-            self.dedup.mark_alerted(key)
 
     def test_feishu(self) -> None:
         """发送测试卡片验证飞书机器人连通性"""

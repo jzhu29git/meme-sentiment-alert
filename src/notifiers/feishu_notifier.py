@@ -6,7 +6,7 @@
 import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import requests
 
 from src.config import config
@@ -171,7 +171,87 @@ class FeishuNotifier:
         }
         return card
 
+    def build_digest_card(self, token_alerts: List[Dict[str, Any]], nft_alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        构造聚合型 Meme & NFT 舆情异动精选简报 (Digest Card)
+        """
+        now_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        total_count = len(token_alerts) + len(nft_alerts)
+
+        md_sections = []
+        md_sections.append(f"⏱ **扫描时间**: `{now_str}`  |  **全网异动捕获**: **{total_count}** 个")
+
+        if token_alerts:
+            md_sections.append("\n### 🚀 **链上热门 Meme 币异动**")
+            for idx, item in enumerate(token_alerts[:6], start=1):
+                sym = item.get("symbol", "TOKEN")
+                name = item.get("name", "")
+                chain = item.get("chain", "")
+                p_m5 = item.get("priceChangeM5", 0)
+                p_h1 = item.get("priceChangeH1", 0)
+                v_m5 = item.get("volumeM5", 0)
+                liq = item.get("liquidityUsd", 0)
+                score = item.get("score", 0)
+                addr = item.get("tokenAddress", "")
+                url = item.get("url", "")
+                gmgn_url = f"https://gmgn.ai/{chain.lower()}/token/{addr}"
+
+                p_m5_str = f"+{p_m5:.1f}%" if p_m5 > 0 else f"{p_m5:.1f}%"
+                p_h1_str = f"+{p_h1:.1f}%" if p_h1 > 0 else f"{p_h1:.1f}%"
+
+                md_sections.append(
+                    f"**{idx}. [${sym}]({url})** (`{chain}`) - **热度 {score}分**\n"
+                    f"• 5m: **{p_m5_str}** (${v_m5:,.0f}) | 1h: **{p_h1_str}** | 池深: `${liq:,.0f}`\n"
+                    f"• 合约: `{addr}` | [GMGN持仓]({gmgn_url})"
+                )
+
+        if nft_alerts:
+            md_sections.append("\n### 🎯 **热点 NFT 市场异动**")
+            for idx, item in enumerate(nft_alerts[:4], start=1):
+                name = item.get("name", "NFT")
+                chain = item.get("chain", "")
+                floor = item.get("floorPrice", 0)
+                vol24 = item.get("volume24h", 0)
+                url = item.get("elementUrl", "")
+                reasons = " | ".join(item.get("reasons", []))
+
+                md_sections.append(
+                    f"**{idx}. [{name}]({url})** (`{chain}`)\n"
+                    f"• 地板价: `{floor} {chain}` | 24h额: `{vol24:.2f} {chain}`\n"
+                    f"• 说明: {reasons}"
+                )
+
+        content = "\n".join(md_sections)
+
+        card = {
+            "config": {"wide_screen_mode": True},
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": f"⚡【Meme & NFT 链上舆情精选简报】命中 {total_count} 个异动"
+                },
+                "template": "carmine" if any(t.get("priceChangeM5", 0) >= 30 for t in token_alerts) else "blue"
+            },
+            "elements": [
+                {
+                    "tag": "markdown",
+                    "content": content
+                },
+                {
+                    "tag": "note",
+                    "elements": [
+                        {
+                            "tag": "plain_text",
+                            "content": "💡 提示：点击代币名称直达 DexScreener K线，点击 [GMGN持仓] 检查聪明钱持仓与貔貅风险。"
+                        }
+                    ]
+                }
+            ]
+        }
+        return card
+
     def send_card(self, card_dict: Dict[str, Any]) -> bool:
+
         """投递飞书卡片"""
         # 1. 优先使用 App-Bot 模式投递到指定群聊
         if config.is_feishu_app_bot_ready():

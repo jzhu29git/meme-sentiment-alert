@@ -20,6 +20,9 @@ class NFTFetcher:
     def __init__(self, timeout: int = 15):
         self.timeout = timeout
         self.session = requests.Session()
+        proxies = config.get_overseas_proxies()
+        if proxies:
+            self.session.proxies.update(proxies)
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "application/json",
