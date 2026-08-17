@@ -14,6 +14,7 @@ from rich.panel import Panel
 from src.config import config
 from src.fetchers.dex_fetcher import DexFetcher
 from src.fetchers.nft_fetcher import NFTFetcher
+from src.fetchers.cex_fetcher import CEXFetcher
 from src.engine.sentiment_analyzer import SentimentAnalyzer
 from src.engine.dedup_manager import DedupManager
 from src.notifiers.feishu_notifier import FeishuNotifier
@@ -29,23 +30,25 @@ console = Console()
 
 
 class MemeAlertSystem:
-    """舆情异动监控主控系统"""
+    """舆情异动监控主控系统 (DEX + CEX + NFT)"""
 
     def __init__(self, dry_run: bool = False):
         self.dry_run = dry_run
         self.dex_fetcher = DexFetcher()
         self.nft_fetcher = NFTFetcher()
+        self.cex_fetcher = CEXFetcher()
         self.analyzer = SentimentAnalyzer()
         self.dedup = DedupManager()
         self.notifier = FeishuNotifier()
 
     def run_scan(self) -> int:
         """执行单轮全网扫描与异动判定"""
-        console.print(Panel.fit("🔍 [bold cyan]正在执行链上 Meme 与 NFT 舆情异动扫描...[/bold cyan]"))
+        console.print(Panel.fit("🔍 [bold cyan]正在执行链上 DEX、CEX 交易所与 NFT 舆情异动扫描...[/bold cyan]"))
         token_alerts = []
         nft_alerts = []
+        cex_alerts = []
 
-        # 1. 扫描链上 Meme 代币
+        # 1. 扫描链上 DEX Meme 代币
         try:
             tokens = self.dex_fetcher.collect_hot_candidates()
             for token in tokens:
@@ -57,9 +60,22 @@ class MemeAlertSystem:
                     else:
                         logger.debug("代币 [%s] 处于冷却期中，跳过推送", token_key)
         except Exception as e:
-            logger.error("扫描代币异动时出错: %s", e)
+            logger.error("扫描 DEX 代币异动时出错: %s", e)
 
-        # 2. 扫描热点 NFT
+        # 2. 扫描 CEX (Binance & OKX)
+        if config.ENABLE_CEX_MONITOR:
+            try:
+                hot_cex = self.cex_fetcher.collect_cex_candidates()
+                for item in hot_cex:
+                    cex_key = f"CEX:{item['exchange']}:{item['symbol']}"
+                    if self.dedup.is_fresh_alert(cex_key):
+                        cex_alerts.append((item, cex_key))
+                    else:
+                        logger.debug("CEX [%s] 处于冷却期中，跳过推送", cex_key)
+            except Exception as e:
+                logger.error("扫描 CEX 交易所异动时出错: %s", e)
+
+        # 3. 扫描热点 NFT
         try:
             nfts = self.nft_fetcher.scan_monitored_meme_nfts()
             for nft in nfts:
@@ -73,35 +89,51 @@ class MemeAlertSystem:
         except Exception as e:
             logger.error("扫描 NFT 异动时出错: %s", e)
 
-        total_alerts = len(token_alerts) + len(nft_alerts)
+        total_alerts = len(token_alerts) + len(cex_alerts) + len(nft_alerts)
 
         # 控制台打印明细
         for alert, _ in token_alerts:
             self._print_token_table(alert)
+        for alert, _ in cex_alerts:
+            self._print_cex_table(alert)
         for alert, _ in nft_alerts:
             self._print_nft_table(alert)
 
-        # 3. 投递飞书简报 Digest
+        # 4. 投递飞书简报 Digest
         if total_alerts > 0:
             digest_card = self.notifier.build_digest_card(
                 [a[0] for a in token_alerts],
-                [a[0] for a in nft_alerts]
+                [a[0] for a in nft_alerts],
+                [a[0] for a in cex_alerts]
             )
             if not self.dry_run:
                 success = self.notifier.send_card(digest_card)
                 if success:
-                    for _, key in token_alerts + nft_alerts:
+                    for _, key in token_alerts + nft_alerts + cex_alerts:
                         self.dedup.mark_alerted(key)
             else:
                 console.print("[yellow][DRY-RUN 模式] 仅在控制台预览 Digest，不发送真实飞书消息[/yellow]")
-                for _, key in token_alerts + nft_alerts:
+                for _, key in token_alerts + nft_alerts + cex_alerts:
                     self.dedup.mark_alerted(key)
 
-        # 4. 清理过期去重状态
+        # 5. 清理过期去重状态
         self.dedup.cleanup_expired()
 
-        console.print(f"[bold green]✓ 本轮扫描完成，共捕获 {total_alerts} 个新异动预警。[/bold green]")
+        console.print(f"[bold green]✓ 本轮扫描完成，共捕获 {total_alerts} 个新异动预警 (DEX: {len(token_alerts)}, CEX: {len(cex_alerts)}, NFT: {len(nft_alerts)})。[/bold green]")
         return total_alerts
+
+    def _print_cex_table(self, item: dict) -> None:
+        table = Table(title=f"🏛️ CEX 异动: ${item['symbol']} ({item['exchange']})", show_header=True)
+        table.add_column("指标", style="cyan")
+        table.add_column("数值", style="magenta")
+        table.add_row("标的名称 / 交易对", f"{item['symbol']} ({item['pair']})")
+        table.add_row("交易所 / 现价", f"{item['exchange']} / ${item['priceUsd']:,.6f}")
+        table.add_row("24h 涨幅", f"{item['priceChange24h']:+.2f}%")
+        table.add_row("24h 成交额 (USDT)", f"${item['quoteVolume24h']:,.0f}")
+        table.add_row("Meme 标识", "🐶 是" if item.get('isMeme') else "否")
+        table.add_row("交易链接", item['url'])
+        console.print(table)
+
 
     def _print_token_table(self, alert: dict) -> None:
         table = Table(title=f"🔥 Meme 异动: ${alert['symbol']} ({alert['chain']})", show_header=True)

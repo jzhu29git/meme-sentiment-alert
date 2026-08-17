@@ -219,21 +219,27 @@ class FeishuNotifier:
         }
         return card
 
-    def build_digest_card(self, token_alerts: List[Dict[str, Any]], nft_alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def build_digest_card(
+        self,
+        token_alerts: List[Dict[str, Any]],
+        nft_alerts: List[Dict[str, Any]],
+        cex_alerts: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
-        构造聚合型 Meme & NFT 舆情异动精选简报 (Digest Card)
+        构造聚合型 Meme、NFT 与 CEX (Binance / OKX) 舆情异动精选简报 (Digest Card)
         """
         now_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        total_count = len(token_alerts) + len(nft_alerts)
+        cex_alerts = cex_alerts or []
+        total_count = len(token_alerts) + len(nft_alerts) + len(cex_alerts)
 
         md_sections = []
         md_sections.append(f"⏱ **扫描时间**: `{now_str}`  |  **全网异动捕获**: **{total_count}** 个")
 
+        # 1. 链上 DEX Meme
         if token_alerts:
-            md_sections.append("\n### 🚀 **链上热门 Meme 币异动**")
-            for idx, item in enumerate(token_alerts[:6], start=1):
+            md_sections.append("\n### 🚀 **链上 DEX 热门 Meme 币异动 (Solana / BSC / Base)**")
+            for idx, item in enumerate(token_alerts[:5], start=1):
                 sym = item.get("symbol", "TOKEN")
-                name = item.get("name", "")
                 chain = item.get("chain", "")
                 p_m5 = item.get("priceChangeM5", 0)
                 p_h1 = item.get("priceChangeH1", 0)
@@ -254,10 +260,29 @@ class FeishuNotifier:
                     f"• 合约: `{addr}` | [GMGN持仓]({gmgn_url})"
                 )
 
+        # 2. CEX (Binance & OKX)
+        if cex_alerts:
+            md_sections.append("\n### 🏛️ **主流交易所异动 (Binance & OKX 飙升榜)**")
+            for idx, item in enumerate(cex_alerts[:6], start=1):
+                sym = item.get("symbol", "COIN")
+                exch = item.get("exchange", "CEX")
+                p_24h = item.get("priceChange24h", 0)
+                vol_24h = item.get("quoteVolume24h", 0)
+                url = item.get("url", "")
+                is_meme = item.get("isMeme", False)
+                tag = "🐶 [Meme]" if is_meme else "🔥"
 
+                p_str = f"+{p_24h:.2f}%" if p_24h > 0 else f"{p_24h:.2f}%"
+
+                md_sections.append(
+                    f"**{idx}. {tag} [${sym}]({url})** (`{exch}`) - **24h: {p_str}**\n"
+                    f"• 24h 成交额: `${vol_24h:,.0f}` | [前往 {exch} 交易]({url})"
+                )
+
+        # 3. NFT 市场
         if nft_alerts:
-            md_sections.append("\n### 🎯 **热点 NFT 市场异动**")
-            for idx, item in enumerate(nft_alerts[:4], start=1):
+            md_sections.append("\n### 🎯 **热点 NFT 市场异动 (Element)**")
+            for idx, item in enumerate(nft_alerts[:3], start=1):
                 name = item.get("name", "NFT")
                 chain = item.get("chain", "")
                 floor = item.get("floorPrice", 0)
@@ -278,9 +303,9 @@ class FeishuNotifier:
             "header": {
                 "title": {
                     "tag": "plain_text",
-                    "content": f"⚡【Meme & NFT 链上舆情精选简报】命中 {total_count} 个异动"
+                    "content": f"⚡【全网 Meme / CEX / NFT 舆情异动简报】捕获 {total_count} 个标的"
                 },
-                "template": "carmine" if any(t.get("priceChangeM5", 0) >= 30 for t in token_alerts) else "blue"
+                "template": "carmine" if any(t.get("priceChangeM5", 0) >= 30 for t in token_alerts) or any(c.get("priceChange24h", 0) >= 25 for c in cex_alerts) else "blue"
             },
             "elements": [
                 {
@@ -292,13 +317,14 @@ class FeishuNotifier:
                     "elements": [
                         {
                             "tag": "plain_text",
-                            "content": "💡 提示：点击代币名称直达 DexScreener K线，点击 [GMGN持仓] 检查聪明钱持仓与貔貅风险。"
+                            "content": "💡 提示：点击标的名可直达 DexScreener / Binance / OKX 实盘，点击 [GMGN持仓] 查验聪明钱。"
                         }
                     ]
                 }
             ]
         }
         return card
+
 
     def send_card(self, card_dict: Dict[str, Any]) -> bool:
 

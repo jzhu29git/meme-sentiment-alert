@@ -72,6 +72,11 @@ class Config:
     NFT_MIN_24H_VOLUME_BNB: float = float(os.getenv("NFT_MIN_24H_VOLUME_BNB", "0.5"))
     NFT_MIN_24H_VOLUME_ETH: float = float(os.getenv("NFT_MIN_24H_VOLUME_ETH", "0.3"))
 
+    # CEX (Binance & OKX) 告警阈值
+    ENABLE_CEX_MONITOR: bool = os.getenv("ENABLE_CEX_MONITOR", "true").lower() in ("true", "1", "yes")
+    CEX_MIN_GAIN_PCT: float = float(os.getenv("CEX_MIN_GAIN_PCT", "6.0"))          # CEX 24h 涨幅 >= 6%
+    CEX_MIN_QUOTE_VOL_USD: float = float(os.getenv("CEX_MIN_QUOTE_VOL_USD", "2000000")) # 24h 成交额 >= 200万 USDT
+
     # 飞书凭证加载（环境变量优先，其次自动读取 openclaw.json，默认群 fallback）
     _openclaw_feishu = _get_openclaw_feishu_config()
     FEISHU_APP_ID: str = (os.getenv("FEISHU_APP_ID", "") or _openclaw_feishu.get("app_id", "")).strip()

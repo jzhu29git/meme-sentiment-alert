@@ -91,3 +91,37 @@ def test_feishu_card_builder():
     card = notifier.build_token_card(mock_alert)
     assert card["header"]["title"]["content"].startswith("🔥【Meme异动预警】")
     assert len(card["elements"]) == 2
+
+
+def test_feishu_digest_card_with_cex():
+    notifier = FeishuNotifier()
+    mock_tokens = [{
+        "symbol": "PEPE",
+        "chain": "SOLANA",
+        "priceChangeM5": 35.0,
+        "priceChangeH1": 100.0,
+        "volumeM5": 50000,
+        "liquidityUsd": 80000,
+        "score": 90,
+        "tokenAddress": "token123",
+    }]
+    mock_nfts = [{
+        "name": "牛来",
+        "chain": "BSC",
+        "floorPrice": 0.04,
+        "volume24h": 2.5,
+        "elementUrl": "https://element.market/collections/niulais",
+        "reasons": ["热度飙升"],
+    }]
+    mock_cex = [{
+        "symbol": "DOGE",
+        "exchange": "BINANCE",
+        "priceChange24h": 18.5,
+        "quoteVolume24h": 85000000,
+        "url": "https://www.binance.com/zh-CN/trade/DOGE_USDT",
+        "isMeme": True,
+    }]
+
+    digest = notifier.build_digest_card(mock_tokens, mock_nfts, mock_cex)
+    assert digest["header"]["title"]["content"].startswith("⚡【全网 Meme / CEX / NFT 舆情异动简报】")
+    assert len(digest["elements"]) == 2
