@@ -14,6 +14,39 @@ from src.config import config
 logger = logging.getLogger(__name__)
 
 
+def get_gmgn_url(chain: str, address: str) -> str:
+    """根据公链获取正确的 GMGN 路由链接 (Solana 必须使用 sol 而非 solana)"""
+    c = (chain or "").lower().strip()
+    if c in ("solana", "sol"):
+        chain_slug = "sol"
+    elif c in ("bsc", "bnb", "binance"):
+        chain_slug = "bsc"
+    elif c in ("base",):
+        chain_slug = "base"
+    elif c in ("ethereum", "eth", "ether"):
+        chain_slug = "eth"
+    else:
+        chain_slug = c
+    return f"https://gmgn.ai/{chain_slug}/token/{address}"
+
+
+def get_dexscreener_url(chain: str, address: str, pair_address: str = "") -> str:
+    """根据公链获取正确的 DexScreener 链接"""
+    c = (chain or "").lower().strip()
+    if c in ("sol", "solana"):
+        chain_slug = "solana"
+    elif c in ("bsc", "bnb"):
+        chain_slug = "bsc"
+    elif c in ("base",):
+        chain_slug = "base"
+    elif c in ("eth", "ethereum"):
+        chain_slug = "ethereum"
+    else:
+        chain_slug = c
+    target = pair_address or address
+    return f"https://dexscreener.com/{chain_slug}/{target}"
+
+
 class FeishuNotifier:
     """飞书预警通知器"""
 
@@ -65,17 +98,18 @@ class FeishuNotifier:
         fdv = alert_data.get("fdv", 0)
         price_usd = alert_data.get("priceUsd", 0)
         addr = alert_data.get("tokenAddress", "")
+        pair_addr = alert_data.get("pairAddress", "")
         reasons = alert_data.get("reasons", [])
         risks = alert_data.get("riskFlags", [])
-        dex_url = alert_data.get("url", f"https://dexscreener.com/{chain.lower()}/{addr}")
+        
+        dex_url = alert_data.get("url") or get_dexscreener_url(chain, addr, pair_addr)
+        gmgn_url = get_gmgn_url(chain, addr)
 
         # 卡片主题颜色：涨幅极大用 red (红涨)，中等用 carmine/orange
         template = "carmine" if p_m5 >= 30 else "orange"
 
         reasons_text = "\n".join([f"• {r}" for r in reasons]) or "• 链上买单与交易量异动"
         risks_text = " | ".join(risks) if risks else "✅ 基础流动性与交易指标正常"
-
-        gmgn_url = f"https://gmgn.ai/{chain.lower()}/token/{addr}"
 
         card = {
             "config": {"wide_screen_mode": True},
@@ -185,7 +219,6 @@ class FeishuNotifier:
         }
         return card
 
-
     def build_digest_card(self, token_alerts: List[Dict[str, Any]], nft_alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         构造聚合型 Meme & NFT 舆情异动精选简报 (Digest Card)
@@ -208,8 +241,9 @@ class FeishuNotifier:
                 liq = item.get("liquidityUsd", 0)
                 score = item.get("score", 0)
                 addr = item.get("tokenAddress", "")
-                url = item.get("url", "")
-                gmgn_url = f"https://gmgn.ai/{chain.lower()}/token/{addr}"
+                pair_addr = item.get("pairAddress", "")
+                url = item.get("url") or get_dexscreener_url(chain, addr, pair_addr)
+                gmgn_url = get_gmgn_url(chain, addr)
 
                 p_m5_str = f"+{p_m5:.1f}%" if p_m5 > 0 else f"{p_m5:.1f}%"
                 p_h1_str = f"+{p_h1:.1f}%" if p_h1 > 0 else f"{p_h1:.1f}%"
@@ -219,6 +253,7 @@ class FeishuNotifier:
                     f"• 5m: **{p_m5_str}** (${v_m5:,.0f}) | 1h: **{p_h1_str}** | 池深: `${liq:,.0f}`\n"
                     f"• 合约: `{addr}` | [GMGN持仓]({gmgn_url})"
                 )
+
 
         if nft_alerts:
             md_sections.append("\n### 🎯 **热点 NFT 市场异动**")
