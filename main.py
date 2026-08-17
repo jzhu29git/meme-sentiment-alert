@@ -130,39 +130,42 @@ class MemeAlertSystem:
 
     def test_feishu(self) -> None:
         """发送测试卡片验证飞书机器人连通性"""
-        console.print(Panel.fit("🧪 [bold cyan]正在发送测试预警卡片至飞书...[/bold cyan]"))
-        test_alert = {
-            "type": "TOKEN",
-            "name": "Niulai Cow Meme",
-            "symbol": "NIULAI",
-            "chain": "BSC",
-            "tokenAddress": "0x5fd0d8fecf408f61080cea470249026d3e02fb3d",
-            "pairAddress": "0x311188be...",
-            "priceUsd": 0.00345,
-            "fdv": 3450000,
-            "liquidityUsd": 128500,
-            "volumeM5": 45600,
-            "volumeH1": 198000,
-            "priceChangeM5": 38.5,
-            "priceChangeH1": 125.0,
-            "priceChangeH24": 350.0,
-            "buysM5": 68,
-            "sellsM5": 12,
-            "score": 95,
-            "reasons": [
-                "⚡ 5m成交量突破 $45,600 且短线暴拉 +38.5%",
-                "🔥 5m买卖单比高达 5.7:1 (68笔买入/12笔卖出)",
-                "🎯 关联现象级热点《牛来》电影社群爆发"
-            ],
-            "riskFlags": ["✅ 流动性充足", "✅ 社区热度极高"],
-            "url": "https://dexscreener.com/bsc/0x5fd0d8fecf408f61080cea470249026d3e02fb3d",
-        }
-        card = self.notifier.build_token_card(test_alert)
-        ok = self.notifier.send_card(card)
+        console.print(Panel.fit("🧪 [bold cyan]正在发送测试预警简报至飞书...[/bold cyan]"))
+        test_tokens = [
+            {
+                "type": "TOKEN",
+                "name": "Reddit Founder Cat",
+                "symbol": "Karma",
+                "chain": "SOLANA",
+                "tokenAddress": "FMiBqDMPgGukPPj1fwTgpNvxjpLVwMCjZP8ULryKpump",
+                "priceUsd": 0.00005,
+                "priceChangeM5": 4.44,
+                "priceChangeH1": 66.25,
+                "volumeM5": 40306,
+                "liquidityUsd": 15255,
+                "score": 75,
+                "url": "https://dexscreener.com/solana/FMiBqDMPgGukPPj1fwTgpNvxjpLVwMCjZP8ULryKpump",
+            }
+        ]
+        test_nfts = [
+            {
+                "type": "NFT",
+                "name": "牛来 (NIULAI)",
+                "slug": "niulais",
+                "chain": "BSC",
+                "contractAddress": "0x5fd0d8fecf408f61080cea470249026d3e02fb3d",
+                "floorPrice": 0.037,
+                "volume24h": 1.45,
+                "elementUrl": "https://element.market/collections/niulais",
+                "reasons": ["🎯 现象级热点《牛来》Meme NFT 重点追踪"],
+            }
+        ]
+        digest = self.notifier.build_digest_card(test_tokens, test_nfts)
+        ok = self.notifier.send_card(digest)
         if ok:
-            console.print("[bold green]✓ 飞书测试卡片投递成功！请查看飞书对应群聊。[/bold green]")
+            console.print("[bold green]✓ 飞书测试简报投递成功！请查看飞书对应群聊。[/bold green]")
         else:
-            console.print("[bold red]✗ 飞书测试卡片投递失败，请检查配置或网络。[/bold red]")
+            console.print("[bold red]✗ 飞书测试简报投递失败，请检查配置或网络。[/bold red]")
 
 
 def main():

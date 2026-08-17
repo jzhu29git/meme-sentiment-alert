@@ -125,7 +125,7 @@ class FeishuNotifier:
         """构造 NFT 异动飞书交互卡片"""
         name = alert_data.get("name", "NFT Collection")
         slug = alert_data.get("slug", "")
-        chain = alert_data.get("chain", "BSC")
+        chain = alert_data.get("chain", "BSC").upper()
         floor_price = alert_data.get("floorPrice", 0)
         vol_24h = alert_data.get("volume24h", 0)
         owners = alert_data.get("owners", 0)
@@ -133,7 +133,15 @@ class FeishuNotifier:
         reasons = alert_data.get("reasons", [])
         element_url = alert_data.get("elementUrl", f"https://element.market/collections/{slug}")
 
-        reasons_text = "\n".join([f"• {r}" for r in reasons])
+        # 构造对应链的区块浏览器链接
+        if chain == "BSC":
+            scan_url = f"https://bscscan.com/token/{addr}" if addr else "https://bscscan.com"
+        elif chain == "ETHEREUM":
+            scan_url = f"https://etherscan.io/token/{addr}" if addr else "https://etherscan.io"
+        else:
+            scan_url = f"https://solscan.io/token/{addr}" if addr else "https://solscan.io"
+
+        reasons_text = "\n".join([f"• {r}" for r in reasons]) or "• 链上交易量与地板价异动"
 
         card = {
             "config": {"wide_screen_mode": True},
@@ -153,7 +161,7 @@ class FeishuNotifier:
                         f"**持有人数**: `{owners}`\n"
                         f"**合约地址**: `{addr or '暂未公开/多合约'}`\n\n"
                         f"**【热度分析与异动】**\n{reasons_text}\n\n"
-                        f"💡 *提示：遇热点项目早期 Mint，请通过 BscScan / 合约官方入口或独立小号钱包操作，切勿主钱包盲目授权。*"
+                        f"💡 *提示：NFT 请前往 Element 市场交易或在 BscScan 查验合约，非 ERC-20 代币不适用于 DexScreener/GMGN。*"
                     )
                 },
                 {
@@ -161,15 +169,22 @@ class FeishuNotifier:
                     "actions": [
                         {
                             "tag": "button",
-                            "text": {"tag": "plain_text", "content": "🛒 前往 Element Market 查看"},
+                            "text": {"tag": "plain_text", "content": "🛒 前往 Element Market 交易"},
                             "type": "primary",
                             "url": element_url
+                        },
+                        {
+                            "tag": "button",
+                            "text": {"tag": "plain_text", "content": f"🔍 在 {chain}Scan 查看合约"},
+                            "type": "default",
+                            "url": scan_url
                         }
                     ]
                 }
             ]
         }
         return card
+
 
     def build_digest_card(self, token_alerts: List[Dict[str, Any]], nft_alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
